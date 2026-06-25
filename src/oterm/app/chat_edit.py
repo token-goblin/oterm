@@ -299,13 +299,16 @@ class ChatEdit(ModalScreen[str]):
         for i, line in enumerate(lines):
             if line.strip().upper().startswith("SYSTEM"):
                 value = line.strip()[6:].strip()
-                if value == '"':
+                if value in ('"""', '"'):
+                    closing = value
                     inner: list[str] = []
                     for subsequent in lines[i + 1 :]:
-                        if subsequent.strip() == '"':
+                        if subsequent.strip() == closing:
                             break
                         inner.append(subsequent)
                     return "\n".join(inner)
+                if value.startswith('"""') and value.endswith('"""'):
+                    return value[3:-3]
                 if value.startswith('"') and value.endswith('"'):
                     return value[1:-1]
                 return value
