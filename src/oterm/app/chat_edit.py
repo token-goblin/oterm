@@ -237,9 +237,11 @@ class ChatEdit(ModalScreen[str]):
                 self.models_info[model] = meta
 
             self.model_info = meta
-            self._populate_parameter_inputs(self.parameters)
+            modelfile_params = self._parse_modelfile_parameters(meta.parameters or "")
+            self._populate_parameter_inputs(self.parameters or modelfile_params)
+            modelfile_system = self._parse_modelfile_system(meta.modelfile or "")
             self.query_one(".system", TextArea).load_text(
-                self.system or self.model_info.get("system", "")
+                self.system or self.model_info.get("system") or modelfile_system
             )
             capabilities: list[str] = list(self.model_info.get("capabilities", []))
         else:
@@ -265,6 +267,49 @@ class ChatEdit(ModalScreen[str]):
 
         display_caps = [c for c in capabilities if c not in ("completion", "embedding")]
         self.query_one(".caps", Capabilities).caps = display_caps  # ty: ignore[invalid-assignment]
+
+    def _parse_modelfile_parameters(self, params_str: str) -> dict[str, Any]:
+        _KEY_MAP = {
+            "temperature": "temperature",
+            "top_p": "top_p",
+            "num_predict": "max_tokens",
+            "seed": "seed",
+        }
+        result: dict[str, Any] = {}
+        for line in params_str.splitlines():
+            parts = line.strip().split(None, 1)
+            if len(parts) != 2:
+                continue
+            modelfile_key, raw_value = parts
+            oterm_key = _KEY_MAP.get(modelfile_key)
+            if oterm_key is None:
+                continue
+            for spec in _PARAM_SPECS:
+                if spec.key == oterm_key:
+                    try:
+                        result[oterm_key] = spec.parser(raw_value)
+                    except ValueError:
+                        pass
+                    break
+        return result
+
+    def _parse_modelfile_system(self, modelfile: str) -> str:
+        """Extract the SYSTEM prompt from a raw Modelfile string."""
+        lines = modelfile.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip().upper().startswith("SYSTEM"):
+                value = line.strip()[6:].strip()
+                if value == '"':
+                    inner: list[str] = []
+                    for subsequent in lines[i + 1 :]:
+                        if subsequent.strip() == '"':
+                            break
+                        inner.append(subsequent)
+                    return "\n".join(inner)
+                if value.startswith('"') and value.endswith('"'):
+                    return value[1:-1]
+                return value
+        return ""
 
     def _populate_parameter_inputs(self, parameters: dict[str, Any]) -> None:
         supported = get_supported_setting_keys(self.provider)

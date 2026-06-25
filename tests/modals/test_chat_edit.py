@@ -26,6 +26,8 @@ def stub_providers(monkeypatch):
     monkeypatch.setattr(ollama_mod, "list_models", lambda: _Resp())
 
     class _Show(dict):
+        modelfile = ""
+
         @property
         def parameters(self):
             return ""
@@ -242,6 +244,7 @@ async def test_loading_a_model_populates_inputs(app_config, monkeypatch):
 
     class _Show(dict):
         parameters = "temperature 0.7\ntop_p 0.95"
+        modelfile = 'SYSTEM "default system"'
 
         def get(self, key, default=""):
             if key == "capabilities":
@@ -262,9 +265,41 @@ async def test_loading_a_model_populates_inputs(app_config, monkeypatch):
         await pilot.pause()
 
         assert screen.query_one(".system", TextArea).text == "default system"
-        assert screen.query_one("#temperature-input", Input).value == ""
-        assert screen.query_one("#top-p-input", Input).value == ""
+        assert screen.query_one("#temperature-input", Input).value == "0.7"
+        assert screen.query_one("#top-p-input", Input).value == "0.95"
         assert screen.query_one("#save-btn", Button).disabled is False
+
+
+async def test_saved_parameters_take_precedence_over_modelfile(app_config, monkeypatch):
+    """Saved chat parameters win over Modelfile defaults when both are present."""
+    import oterm.app.chat_edit as ce
+
+    class _Show(dict):
+        parameters = "temperature 0.7\ntop_p 0.95"
+        modelfile = ""
+
+        def get(self, key, default=""):
+            if key == "capabilities":
+                return ["tools", "completion"]
+            if key == "system":
+                return ""
+            return default
+
+    monkeypatch.setattr(ce.ollama, "show_model", lambda m: _Show())
+
+    app = _Host()
+    async with app.run_test() as pilot:
+        chat_model = ChatModel(
+            model="some-model",
+            provider="ollama",
+            parameters={"temperature": 0.2},
+        )
+        screen = ChatEdit(chat_model=chat_model, edit_mode=True)
+        app.push_screen(screen)
+        await pilot.pause()
+
+        assert screen.query_one("#temperature-input", Input).value == "0.2"
+        assert screen.query_one("#top-p-input", Input).value == ""
 
 
 async def test_unsupported_param_specs_are_skipped(app_config, monkeypatch):
@@ -433,6 +468,7 @@ async def test_load_model_info_skips_when_already_loaded(app_config, monkeypatch
 
         class _Show(dict):
             parameters = ""
+            modelfile = ""
 
             def get(self, key, default=""):
                 return default
@@ -467,6 +503,7 @@ async def test_load_model_info_uses_cached_meta(app_config, monkeypatch):
 
     class _Cached(dict):
         parameters = ""
+        modelfile = ""
 
         def __bool__(self) -> bool:
             return True
@@ -608,3 +645,33 @@ async def test_on_select_changed_same_provider_is_noop(app_config):
         await pilot.pause()
         # No reset — model_name preserved.
         assert screen.model_name == "llama3"
+
+
+def test_parse_modelfile_system_single_line():
+    screen = ChatEdit()
+    result = screen._parse_modelfile_system('SYSTEM "You are helpful."')
+    assert result == "You are helpful."
+
+
+def test_parse_modelfile_system_multiline():
+    screen = ChatEdit()
+    modelfile = 'FROM base\nSYSTEM "\nYou are helpful.\n"'
+    result = screen._parse_modelfile_system(modelfile)
+    assert result == "You are helpful."
+
+
+def test_parse_modelfile_system_missing():
+    screen = ChatEdit()
+    assert screen._parse_modelfile_system("FROM base\nPARAMETER temperature 0.7") == ""
+
+
+def test_parse_modelfile_parameters_ignores_unknown_keys():
+    screen = ChatEdit()
+    result = screen._parse_modelfile_parameters("unknown_key 42\ntemperature 0.5")
+    assert result == {"temperature": 0.5}
+
+
+def test_parse_modelfile_parameters_ignores_invalid_values():
+    screen = ChatEdit()
+    result = screen._parse_modelfile_parameters("temperature not_a_float\ntop_p 0.9")
+    assert result == {"top_p": 0.9}
