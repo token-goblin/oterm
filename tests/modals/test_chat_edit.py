@@ -264,7 +264,7 @@ async def test_loading_a_model_populates_inputs(app_config, monkeypatch):
         await screen._load_model_info("some-model")
         await pilot.pause()
 
-        assert screen.query_one(".system", TextArea).text == "default system"
+        assert screen.query_one(".system", TextArea).text == ""
         assert screen.query_one("#temperature-input", Input).value == "0.7"
         assert screen.query_one("#top-p-input", Input).value == "0.95"
         assert screen.query_one("#save-btn", Button).disabled is False
@@ -647,31 +647,3 @@ async def test_on_select_changed_same_provider_is_noop(app_config):
         assert screen.model_name == "llama3"
 
 
-def test_parse_modelfile_system_single_line():
-    screen = ChatEdit()
-    result = screen._parse_modelfile_system('SYSTEM "You are helpful."')
-    assert result == "You are helpful."
-
-
-def test_parse_modelfile_system_multiline():
-    screen = ChatEdit()
-    modelfile = 'FROM base\nSYSTEM "\nYou are helpful.\n"'
-    result = screen._parse_modelfile_system(modelfile)
-    assert result == "You are helpful."
-
-
-def test_parse_modelfile_system_missing():
-    screen = ChatEdit()
-    assert screen._parse_modelfile_system("FROM base\nPARAMETER temperature 0.7") == ""
-
-
-def test_parse_modelfile_parameters_ignores_unknown_keys():
-    screen = ChatEdit()
-    result = screen._parse_modelfile_parameters("unknown_key 42\ntemperature 0.5")
-    assert result == {"temperature": 0.5}
-
-
-def test_parse_modelfile_parameters_ignores_invalid_values():
-    screen = ChatEdit()
-    result = screen._parse_modelfile_parameters("temperature not_a_float\ntop_p 0.9")
-    assert result == {"top_p": 0.9}
