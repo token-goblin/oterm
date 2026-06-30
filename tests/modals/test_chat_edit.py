@@ -645,5 +645,3 @@ async def test_on_select_changed_same_provider_is_noop(app_config):
         await pilot.pause()
         # No reset — model_name preserved.
         assert screen.model_name == "llama3"
-
-

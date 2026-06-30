@@ -24,8 +24,8 @@ from oterm.providers import (
     list_models,
     ollama,
 )
-from oterm.providers.ollama import parse_modelfile_parameters
 from oterm.providers.capabilities import get_capabilities
+from oterm.providers.ollama import parse_modelfile_parameters
 from oterm.providers.settings import get_supported_setting_keys
 from oterm.types import ChatModel
 

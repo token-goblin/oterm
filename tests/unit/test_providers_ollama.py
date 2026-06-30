@@ -76,6 +76,10 @@ class TestParseModelfileParameters:
         result = parse_modelfile_parameters("temperature not_a_float\ntop_p 0.9")
         assert result == {"top_p": 0.9}
 
+    def test_ignores_blank_and_valueless_lines(self):
+        result = parse_modelfile_parameters("\nseed\ntemperature 0.5")
+        assert result == {"temperature": 0.5}
+
 
 class TestOpenAICompatBaseUrl:
     def test_appends_v1(self, monkeypatch):
